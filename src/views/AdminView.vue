@@ -31,7 +31,7 @@
   
       const approveMarker = async (id) => {
         try {
-          await apiClient.put(`/markers/approve/${id}`);
+          await apiClient.post(`/markers/approve/${id}`);
           alert("마커가 승인되었습니다.");
           fetchMarkerRequests();
         } catch (error) {

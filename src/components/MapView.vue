@@ -82,7 +82,7 @@ export default {
     // ✅ 승인된 마커 불러오기
     const fetchMarkers = async () => {
       try {
-        const response = await apiClient.get("/markers/approved");
+        const response = await apiClient.get("/markers/approve");
         markers.value = response.data;
         displayMarkers();
       } catch (error) {
@@ -112,6 +112,7 @@ export default {
     const fetchMarkerDetail = async (id) => {
       try {
         const response = await apiClient.get(`/markers/${id}`);
+        console.log("🟢 가져온 마커 데이터:", response.data);
         selectedMarker.value = response.data;
         isDetail.value = true;
         showPopup.value = true;
@@ -146,7 +147,7 @@ export default {
     // ✅ 요청 거부
     const rejectMarker = async (id) => {
       try {
-        await apiClient.delete(`/markers/reject/${id}`);
+        await apiClient.delete(`/markers/${id}`);
         alert("마커가 거부되었습니다.");
         fetchMarkers();
         showRequestDetail.value = false;
