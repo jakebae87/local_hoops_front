@@ -70,7 +70,10 @@ export default {
       // ✅ 지도 클릭 시 팝업 열기
       window.kakao.maps.event.addListener(map.value, "click", (mouseEvent) => {
         console.log("📌 지도 클릭됨:", mouseEvent.latLng);
-        currentPosition.value = mouseEvent.latLng;
+        currentPosition.value = {
+          latitude: mouseEvent.latLng.getLat(),
+          longitude: mouseEvent.latLng.getLng()
+        };
         selectedMarker.value = null;
         isDetail.value = false;
         showPopup.value = true;

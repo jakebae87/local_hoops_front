@@ -3,7 +3,7 @@
     <div class="popup">
       <!-- ✅ 제목 -->
       <h3 class="popup-title">{{ title }}</h3>
-      <input v-if="!isDetail" v-model="title" placeholder="제목 입력" class="popup-input" disabled />
+      <input v-if="!isDetail" v-model="title" placeholder="제목 입력" class="popup-input"/>
 
       <!-- ✅ 이미지 미리보기 -->
       <div v-if="images.length" class="popup-images">
@@ -30,7 +30,7 @@ import { ref, watch } from "vue";
 import apiClient from "@/api/axios";
 
 export default {
-  props: ["marker", "isDetail"], // ✅ 마커 정보 props로 전달받음
+  props: ["marker", "isDetail", "position"], // ✅ 마커 정보 props로 전달받음
   emits: ["close", "save"],
   setup(props, { emit }) {
     const title = ref("");
@@ -61,29 +61,48 @@ export default {
 
     // ✅ 이미지 경로 변환 함수 (백엔드 업로드 디렉토리 경로 추가)
     const getImagePath = (img) => {
-      return img.startsWith("/uploads/") ? `http://localhost:9000${img}` : img;
+      if (!img) return "/default-image.png"; // 기본 이미지 처리
+
+      if (typeof img === "string") {
+        return img.startsWith("/uploads/") ? `http://localhost:9000${img}` : img;
+      } 
+      if (img instanceof File) {
+        return URL.createObjectURL(img); // ✅ 파일 객체일 경우 미리보기 URL 생성
+      }
+
+      return "/default-image.png"; // 혹시라도 예외 발생 시 기본 이미지
     };
 
     const onFileChange = (event) => {
-      if (props.isDetail) return; // ✅ 승인된 마커에서는 파일 수정 불가
+      if (props.isDetail) return;
 
       const files = event.target.files;
-      images.value = [];
+      images.value = []; // 기존 이미지 초기화
 
       for (let i = 0; i < Math.min(files.length, 3); i++) {
         const file = files[i];
-        images.value.push(file);
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          images.value.push(e.target.result);
-        };
-        reader.readAsDataURL(file);
+        if (!file.type.startsWith("image/")) {
+          alert("이미지 파일만 업로드 가능합니다.");
+          continue;
+        }
+
+        images.value.push(file); // ✅ 이제 `File` 객체를 직접 저장하여 `getImagePath()`에서 처리 가능
       }
     };
 
+
     // ✅ 마커 저장 요청
-    const saveMarker = async () => {
+    const saveMarker = async () => {  
+      const latitude = props.position.latitude;
+      const longitude = props.position.longitude;
+
+      if (!latitude || !longitude) {
+        console.error("🚨 오류: 위치 정보가 없습니다.");
+        alert("오류가 발생했습니다. 다시 시도해 주세요.");
+        return;
+      }
+      
       if (!title.value || images.value.length === 0) {
         alert("제목과 최소 1장의 이미지를 등록해야 합니다.");
         return;
@@ -91,8 +110,8 @@ export default {
 
       const formData = new FormData();
       formData.append("title", title.value);
-      formData.append("latitude", props.marker.latitude);
-      formData.append("longitude", props.marker.longitude);
+      formData.append("latitude", latitude);
+      formData.append("longitude", longitude);
       images.value.forEach((image) => {
         formData.append("images", image);
       });
