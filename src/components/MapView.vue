@@ -82,6 +82,29 @@ export default {
       fetchMarkers();
     };
 
+    // ✅ 위치 정보 요청 및 지도 초기화
+    const requestUserLocation = () => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            console.log("📌 사용자 위치 정보:", position);
+            const userLocation = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            };
+            initMap(userLocation);
+          },
+          (error) => {
+            console.warn("🚨 위치 정보를 가져올 수 없습니다. 기본 위치로 설정:", error);
+            initMap({ lat: 37.5665, lng: 126.9780 }); // 기본 위치 (서울, 광화문)
+          }
+        );
+      } else {
+        console.warn("🚨 이 브라우저는 위치 정보를 지원하지 않습니다.");
+        initMap({ lat: 37.5665, lng: 126.9780 });
+      }
+    };
+
     // ✅ 승인된 마커 불러오기
     const fetchMarkers = async () => {
       try {
@@ -189,10 +212,10 @@ export default {
       if (!document.querySelector('script[src*="dapi.kakao.com"]')) {
         const script = document.createElement("script");
         script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_MAP_KEY&libraries=services`;
-        script.onload = initMap;
+        script.onload = requestUserLocation;
         document.head.appendChild(script);
       } else {
-        initMap();
+        requestUserLocation();
       }
     });
 
