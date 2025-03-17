@@ -106,15 +106,25 @@ export default {
       images.value.forEach(image => formData.append("images", image));
 
       try {
-        await apiClient.post("/markers/request", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        alert("마커 등록 요청이 완료되었습니다. 관리자의 승인을 기다려 주세요.");
-        emit("save");
-        closePopup();
-      } catch (error) {
-        console.error("🚨 마커 저장 요청 실패:", error);
+    const response = await apiClient.post("/markers/request", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    alert(response.data.message); // ✅ 정상 등록 메시지 출력
+    emit("save");
+    closePopup();
+  } catch (error) {
+    console.error("🚨 마커 저장 요청 실패:", error);
+
+    if (error.response) {
+      if (error.response.status === 400) {
+        alert("🚨 등록 실패: " + error.response.data.message); // ✅ 400 오류 메시지 표시
+      } else {
+        alert("🚨 서버 오류 발생: " + error.response.data.message);
       }
+    } else {
+      alert("🚨 네트워크 오류가 발생했습니다.");
+    }
+  }
     };
 
     const closePopup = () => {
