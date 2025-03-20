@@ -46,6 +46,7 @@ export default {
     const images = ref([]);
     const comment = ref("");
     const modalImageIndex = ref(null);
+    const loading = ref(false);
 
     watch(
       () => props.marker,
@@ -92,44 +93,68 @@ export default {
     };
 
     const saveMarker = async () => {
-      const { latitude, longitude } = props.position;
+  const { latitude, longitude } = props.position;
 
-      if (!title.value || images.value.length === 0) {
-        alert("제목과 최소 1장의 이미지를 등록해야 합니다.");
+  if (!title.value || images.value.length === 0) {
+    alert("제목과 최소 1장의 이미지를 등록해야 합니다.");
+    return;
+  }
+
+  loading.value = true;
+
+  try {
+    // ✅ AI 서버에서 이미지 검증 (하나씩)
+    for (const image of images.value) {
+      const aiFormData = new FormData();
+      aiFormData.append("file", image);
+
+      const aiResponse = await apiClient.post("http://localhost:8000/detect/", aiFormData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      console.log("🚀 AI 응답:", aiResponse.data); // ✅ 응답 확인
+
+      if (!aiResponse.data || !aiResponse.data.result) {
+        console.error("🚨 AI 서버 응답 오류: 데이터가 null이거나 예상과 다름", aiResponse);
+        alert("🚨 AI 서버 응답 오류: 올바른 응답을 받지 못했습니다.");
+        loading.value = false;
         return;
       }
 
-      const formData = new FormData();
-      formData.append("title", title.value);
-      formData.append("latitude", latitude);
-      formData.append("longitude", longitude);
-      images.value.forEach(image => formData.append("images", image));
-
-      try {
-        const response = await apiClient.post("/markers/request", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-        if (response.data.error) {
-          alert(response.data.error);  // 부적절한 이미지일 경우 alert 표시
-        } else {
-          alert(response.data.message); // ✅ 정상 등록 메시지 출력
-          emit("save");
-          closePopup();
-        }
-      } catch (error) {
-        console.error("🚨 마커 저장 요청 실패:", error);
-
-        if (error.response) {
-          if (error.response.status === 400) {
-            alert("🚨 등록 실패: " + error.response.data.message); // ✅ 400 오류 메시지 표시
-          } else {
-            alert("🚨 서버 오류 발생: " + error.response.data.message);
-          }
-        } else {
-          alert("🚨 네트워크 오류가 발생했습니다.");
-        }
+      if (aiResponse.data.result !== "valid") {
+        alert("❌ 첨부된 이미지 중 농구 골대가 감지되지 않았습니다.");
+        loading.value = false;
+        return;
       }
-    };
+    }
+
+    // ✅ 검증 통과 후 마커 등록
+    const formData = new FormData();
+    formData.append("title", title.value);
+    formData.append("latitude", latitude);
+    formData.append("longitude", longitude);
+    images.value.forEach(image => formData.append("files", image));
+
+    const response = await apiClient.post("/markers/request", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    if (response.data.error) {
+      alert(response.data.error);
+    } else {
+      alert(response.data.message);
+      emit("save");
+      closePopup();
+    }
+  } catch (error) {
+    console.error("🚨 마커 저장 요청 실패:", error);
+    alert("🚨 오류 발생: " + (error.response?.data?.message || "네트워크 오류"));
+  } finally {
+    loading.value = false;
+  }
+};
+
+
 
     const closePopup = () => {
       emit("close");
