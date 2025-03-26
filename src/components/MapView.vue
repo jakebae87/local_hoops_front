@@ -16,7 +16,11 @@
     <div v-if="isAdmin && showRequestList" class="admin-request-popup">
       <h3>등록 요청 리스트</h3>
       <ul>
-        <li v-for="request in markerRequests" :key="request.id" @click="fetchRequestDetail(request.id)">
+        <li
+          v-for="request in markerRequests"
+          :key="request.id"
+          @click="fetchRequestDetail(request.id)"
+        >
           {{ request.title }} ({{ request.createdAt }})
         </li>
       </ul>
@@ -54,135 +58,128 @@ export default {
     const markers = ref([]);
     const kakaoMarkers = ref([]);
     const map = ref(null);
-    const markerRequests = ref([]); // 관리자 요청 리스트 추가
+    const markerRequests = ref([]);
 
-    // ✅ 지도 초기화
-    const initMap = (center = { lat: 37.5665, lng: 126.9780 }) => {
-      if (!window.kakao || !window.kakao.maps) {
-        console.error("🚨 카카오맵 API가 로드되지 않았습니다.");
-        return;
-      }
+    const initMap = (center = { lat: 37.5665, lng: 126.978 }) => {
+      if (!window.kakao || !window.kakao.maps) return;
 
       const container = document.getElementById("map");
-      const options = { center: new window.kakao.maps.LatLng(center.lat, center.lng), level: 3 };
+      const options = {
+        center: new window.kakao.maps.LatLng(center.lat, center.lng),
+        level: 3,
+      };
       map.value = new window.kakao.maps.Map(container, options);
 
-      // ✅ 지도 클릭 시 팝업 열기
       window.kakao.maps.event.addListener(map.value, "click", (mouseEvent) => {
-        console.log("📌 지도 클릭됨:", mouseEvent.latLng);
-        currentPosition.value = {
-          latitude: mouseEvent.latLng.getLat(),
-          longitude: mouseEvent.latLng.getLng()
-        };
-        selectedMarker.value = null;
-        isDetail.value = false;
-        showPopup.value = true;
+        const lat = mouseEvent.latLng.getLat();
+        const lon = mouseEvent.latLng.getLng();
+
+        if (lat < 33.0 || lat > 39.5 || lon < 124.5 || lon > 131.0) {
+          alert("대한민국 영토 범위 내에서만 등록할 수 있습니다.");
+          return;
+        }
+
+        const geocoder = new window.kakao.maps.services.Geocoder();
+        geocoder.coord2RegionCode(lon, lat, (result, status) => {
+          if (status !== window.kakao.maps.services.Status.OK) return;
+
+          const regionName = result[0]?.region_3depth_name || "";
+          if (regionName.includes("바다")) {
+            alert("바다에는 마커를 등록할 수 없습니다.");
+            return;
+          }
+
+          currentPosition.value = { latitude: lat, longitude: lon };
+          selectedMarker.value = null;
+          isDetail.value = false;
+          showPopup.value = true;
+        });
       });
 
       fetchMarkers();
     };
 
-    // ✅ 위치 정보 요청 및 지도 초기화
     const requestUserLocation = () => {
       if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
-          (position) => {
-            console.log("📌 사용자 위치 정보:", position);
-            const userLocation = {
-              lat: position.coords.latitude,
-              lng: position.coords.longitude,
-            };
-            initMap(userLocation);
-          },
-          (error) => {
-            console.warn("🚨 위치 정보를 가져올 수 없습니다. 기본 위치로 설정:", error);
-            initMap({ lat: 37.5665, lng: 126.9780 }); // 기본 위치 (서울, 광화문)
-          }
+          (pos) =>
+            initMap({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => initMap({ lat: 37.5665, lng: 126.978 })
         );
       } else {
-        console.warn("🚨 이 브라우저는 위치 정보를 지원하지 않습니다.");
-        initMap({ lat: 37.5665, lng: 126.9780 });
+        initMap({ lat: 37.5665, lng: 126.978 });
       }
     };
 
-    // ✅ 승인된 마커 불러오기
     const fetchMarkers = async () => {
       try {
         const response = await apiClient.get("/markers/approve");
         markers.value = response.data;
         displayMarkers();
-      } catch (error) {
-        console.error("🚨 마커 불러오기 실패:", error);
+      } catch (e) {
+        console.error("🚨 마커 불러오기 실패:", e);
       }
     };
 
-    // ✅ 지도에 마커 표시
     const displayMarkers = () => {
-      kakaoMarkers.value.forEach(marker => marker.setMap(null));
+      kakaoMarkers.value.forEach((m) => m.setMap(null));
       kakaoMarkers.value = [];
 
-      markers.value.forEach(markerData => {
+      markers.value.forEach((m) => {
         const marker = new window.kakao.maps.Marker({
-          position: new window.kakao.maps.LatLng(markerData.latitude, markerData.longitude),
+          position: new window.kakao.maps.LatLng(m.latitude, m.longitude),
           map: map.value,
         });
-
+        window.kakao.maps.event.addListener(marker, "click", () =>
+          fetchMarkerDetail(m.id)
+        );
         kakaoMarkers.value.push(marker);
-        window.kakao.maps.event.addListener(marker, "click", () => {
-          fetchMarkerDetail(markerData.id);
-        });
       });
     };
 
-    // ✅ 특정 마커 상세 조회
     const fetchMarkerDetail = async (id) => {
       try {
-        const response = await apiClient.get(`/markers/${id}`);
-        console.log("🟢 가져온 마커 데이터:", response.data);
-        selectedMarker.value = response.data;
+        const res = await apiClient.get(`/markers/${id}`);
+        selectedMarker.value = res.data;
         isDetail.value = true;
         showPopup.value = true;
-      } catch (error) {
-        console.error("🚨 마커 상세 조회 실패:", error);
+      } catch (e) {
+        console.error("🚨 마커 상세 조회 실패:", e);
       }
     };
 
-    // ✅ 요청 상세 정보 불러오기
     const fetchRequestDetail = async (id) => {
       try {
-        const response = await apiClient.get(`/markers/requests/${id}`);
-        selectedRequest.value = response.data;
+        const res = await apiClient.get(`/markers/requests/${id}`);
+        selectedRequest.value = res.data;
         showRequestDetail.value = true;
-      } catch (error) {
-        console.error("🚨 요청 상세 조회 실패:", error);
+      } catch (e) {
+        console.error("🚨 요청 상세 조회 실패:", e);
       }
     };
 
-    // ✅ 요청 승인
     const approveMarker = async (id) => {
       try {
         await apiClient.put(`/markers/approve/${id}`);
         alert("마커가 승인되었습니다.");
         fetchMarkers();
         showRequestDetail.value = false;
-      } catch (error) {
-        console.error("🚨 마커 승인 실패:", error);
+      } catch (e) {
+        console.error("🚨 마커 승인 실패:", e);
       }
     };
 
-    // ✅ 요청 거부
     const rejectMarker = async (id) => {
       try {
         await apiClient.delete(`/markers/${id}`);
         alert("마커가 거부되었습니다.");
         fetchMarkers();
         showRequestDetail.value = false;
-      } catch (error) {
-        console.error("🚨 마커 거부 실패:", error);
+      } catch (e) {
+        console.error("🚨 마커 거부 실패:", e);
       }
     };
 
-    // ✅ 팝업 닫기
     const closePopup = () => {
       showPopup.value = false;
       selectedMarker.value = null;
@@ -193,22 +190,20 @@ export default {
       selectedRequest.value = null;
     };
 
-    // ✅ 관리자 요청 리스트 불러오기
     const fetchMarkerRequests = async () => {
       if (!isAdmin.value) return;
       try {
-        const response = await apiClient.get("/markers/requests");
-        markerRequests.value = response.data;
+        const res = await apiClient.get("/markers/requests");
+        markerRequests.value = res.data;
         showRequestList.value = true;
-      } catch (error) {
-        console.error("🚨 관리자 요청 리스트 불러오기 실패:", error);
+      } catch (e) {
+        console.error("🚨 관리자 요청 리스트 불러오기 실패:", e);
       }
     };
 
     onMounted(() => {
-      if (isAdmin.value) {
-        fetchMarkerRequests();
-      }
+      if (isAdmin.value) fetchMarkerRequests();
+
       if (!document.querySelector('script[src*="dapi.kakao.com"]')) {
         const script = document.createElement("script");
         script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_MAP_KEY&libraries=services`;
@@ -220,12 +215,27 @@ export default {
     });
 
     return {
-      isAdmin, showRequestList, showRequestDetail, markers, fetchMarkers, displayMarkers, 
-      selectedMarker, fetchMarkerDetail, closePopup, showPopup, isDetail,
-      selectedRequest, fetchRequestDetail, approveMarker, rejectMarker, closeRequestDetail,
-      currentPosition, markerRequests, fetchMarkerRequests
+      isAdmin,
+      showRequestList,
+      showRequestDetail,
+      markers,
+      fetchMarkers,
+      displayMarkers,
+      selectedMarker,
+      fetchMarkerDetail,
+      closePopup,
+      showPopup,
+      isDetail,
+      selectedRequest,
+      fetchRequestDetail,
+      approveMarker,
+      rejectMarker,
+      closeRequestDetail,
+      currentPosition,
+      markerRequests,
+      fetchMarkerRequests,
     };
-  }
+  },
 };
 </script>
 
@@ -235,7 +245,8 @@ export default {
   height: 80vh;
 }
 
-.admin-request-popup, .admin-detail-popup {
+.admin-request-popup,
+.admin-detail-popup {
   position: absolute;
   top: 10px;
   right: 10px;
