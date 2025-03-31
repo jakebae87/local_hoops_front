@@ -132,7 +132,9 @@ export default {
     };
 
     const submitComment = async () => {
-      if (!commentInput.value.trim()) return;
+      const confirmSubmit = window.confirm("이 댓글을 등록하시겠습니까?");
+      if (!confirmSubmit) return;
+
       try {
         await apiClient.post("/comments", {
           markerId: props.marker.id,
