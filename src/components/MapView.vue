@@ -80,20 +80,24 @@ export default {
         }
 
         const geocoder = new window.kakao.maps.services.Geocoder();
-        geocoder.coord2RegionCode(lon, lat, (result, status) => {
-          if (status !== window.kakao.maps.services.Status.OK) return;
-
-          const regionName = result[0]?.region_3depth_name || "";
-          if (regionName.includes("바다")) {
-            alert("바다에는 마커를 등록할 수 없습니다.");
+        geocoder.coord2Address(lon, lat, (result, status) => {
+          if (status !== window.kakao.maps.services.Status.OK) {
+            alert("주소를 확인할 수 없는 위치입니다.");
             return;
           }
 
+          if (!result[0] || !result[0].address || result[0].address.address_name === "") {
+            alert("주소가 존재하지 않는 위치입니다.");
+            return;
+          }
+
+          // 주소가 존재하는 경우에만 등록 허용
           currentPosition.value = { latitude: lat, longitude: lon };
           selectedMarker.value = null;
           isDetail.value = false;
           showPopup.value = true;
         });
+
       });
 
       fetchMarkers();
