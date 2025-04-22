@@ -1,7 +1,9 @@
 <template>
   <div>
     <h1>우리 동네 농구코트</h1>
-    <MapView />
+    <keep-alive>
+      <MapView />
+    </keep-alive>
   </div>
 </template>
 

@@ -2,7 +2,6 @@
   <div>
     <div id="map" ref="mapContainer" class="map-container"></div>
 
-    <!-- ✅ 장소 등록 요청 팝업 -->
     <MarkerPopup
       v-if="showPopup"
       :position="currentPosition"
@@ -12,7 +11,6 @@
       @save="fetchMarkers"
     />
 
-    <!-- ✅ 관리자 요청 리스트 팝업 -->
     <div v-if="isAdmin && showRequestList" class="admin-request-popup">
       <h3>등록 요청 리스트</h3>
       <ul>
@@ -26,7 +24,6 @@
       </ul>
     </div>
 
-    <!-- ✅ 관리자 승인/거부 상세 팝업 -->
     <div v-if="isAdmin && showRequestDetail" class="admin-detail-popup">
       <h3>요청 상세 정보</h3>
       <p>제목: {{ selectedRequest?.title }}</p>
@@ -40,7 +37,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, toRaw } from "vue";
 import MarkerPopup from "@/components/MarkerPopup.vue";
 import apiClient from "@/api/axios";
 
@@ -58,6 +55,7 @@ export default {
     const markers = ref([]);
     const kakaoMarkers = ref([]);
     const map = ref(null);
+    const clusterer = ref(null);
     const markerRequests = ref([]);
 
     const initMap = (center = { lat: 37.5665, lng: 126.978 }) => {
@@ -70,7 +68,9 @@ export default {
       };
       map.value = new window.kakao.maps.Map(container, options);
 
-      window.kakao.maps.event.addListener(map.value, "click", (mouseEvent) => {
+      fetchMarkers();
+
+      window.kakao.maps.event.addListener(toRaw(map.value), "click", (mouseEvent) => {
         const lat = mouseEvent.latLng.getLat();
         const lon = mouseEvent.latLng.getLng();
 
@@ -86,33 +86,18 @@ export default {
             return;
           }
 
-          if (!result[0] || !result[0].address || result[0].address.address_name === "") {
+          const address = result[0]?.address?.address_name || "";
+          if (!address) {
             alert("주소가 존재하지 않는 위치입니다.");
             return;
           }
 
-          // 주소가 존재하는 경우에만 등록 허용
           currentPosition.value = { latitude: lat, longitude: lon };
           selectedMarker.value = null;
           isDetail.value = false;
           showPopup.value = true;
         });
-
       });
-
-      fetchMarkers();
-    };
-
-    const requestUserLocation = () => {
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            initMap({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-          () => initMap({ lat: 37.5665, lng: 126.978 })
-        );
-      } else {
-        initMap({ lat: 37.5665, lng: 126.978 });
-      }
     };
 
     const fetchMarkers = async () => {
@@ -126,19 +111,51 @@ export default {
     };
 
     const displayMarkers = () => {
-      kakaoMarkers.value.forEach((m) => m.setMap(null));
-      kakaoMarkers.value = [];
+      if (clusterer.value) {
+        toRaw(clusterer.value).setMap(null);
+      }
 
-      markers.value.forEach((m) => {
-        const marker = new window.kakao.maps.Marker({
-          position: new window.kakao.maps.LatLng(m.latitude, m.longitude),
-          map: map.value,
-        });
-        window.kakao.maps.event.addListener(marker, "click", () =>
-          fetchMarkerDetail(m.id)
-        );
-        kakaoMarkers.value.push(marker);
+      const validMarkers = markers.value
+        .filter((m) => isFinite(m.latitude) && isFinite(m.longitude))
+        .map((m, i) => {
+          try {
+            const latlng = new window.kakao.maps.LatLng(m.latitude, m.longitude);
+            const marker = new window.kakao.maps.Marker({ position: latlng });
+
+            window.kakao.maps.event.addListener(marker, "click", () =>
+              fetchMarkerDetail(m.id)
+            );
+
+            return marker;
+          } catch (err) {
+            console.warn(`❌ 마커 ${i} 생성 실패:`, m, err);
+            return null;
+          }
+        })
+        .filter((m) => m instanceof window.kakao.maps.Marker);
+
+      kakaoMarkers.value = validMarkers;
+
+      clusterer.value = new window.kakao.maps.MarkerClusterer({
+        map: toRaw(map.value),
+        averageCenter: true,
+        minLevel: 5,
       });
+
+      if (validMarkers.length > 0) {
+        toRaw(clusterer.value).addMarkers(validMarkers);
+      }
+    };
+
+    const requestUserLocation = () => {
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => initMap({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => initMap({ lat: 37.5665, lng: 126.978 })
+        );
+      } else {
+        initMap({ lat: 37.5665, lng: 126.978 });
+      }
     };
 
     const fetchMarkerDetail = async (id) => {
@@ -207,15 +224,7 @@ export default {
 
     onMounted(() => {
       if (isAdmin.value) fetchMarkerRequests();
-
-      if (!document.querySelector('script[src*="dapi.kakao.com"]')) {
-        const script = document.createElement("script");
-        script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_MAP_KEY&libraries=services`;
-        script.onload = requestUserLocation;
-        document.head.appendChild(script);
-      } else {
-        requestUserLocation();
-      }
+      requestUserLocation();
     });
 
     return {
