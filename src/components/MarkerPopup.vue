@@ -202,30 +202,26 @@ export default {
         alert("제목과 최소 1장의 이미지를 등록해야 합니다.");
         return;
       }
+
       loading.value = true;
+
       try {
-        for (const image of images.value) {
-          const aiFormData = new FormData();
-          aiFormData.append("file", image);
-          const aiResponse = await apiClient.post(
-            "http://localhost:8000/detect/",
-            aiFormData,
-            { headers: { "Content-Type": "multipart/form-data" } }
-          );
-          if (!aiResponse.data || aiResponse.data.result !== "valid") {
-            alert("❌ 농구 골대가 감지되지 않았습니다.");
-            loading.value = false;
-            return;
-          }
-        }
+        // ✅ AI 서버 호출 제거 (기존 루프 삭제)
+
         const formData = new FormData();
         formData.append("title", title.value);
-        formData.append("latitude", latitude);
-        formData.append("longitude", longitude);
-        images.value.forEach((image) => formData.append("files", image));
-        const response = await apiClient.post("/markers/request", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        formData.append("latitude", latitude.toString());  // 🔥 추가
+        formData.append("longitude", longitude.toString());  // 🔥 추가
+        images.value.forEach((image) => formData.append("images", image)); // ← 중요: 파라미터 이름은 백엔드와 일치해야 함
+
+        const response = await apiClient.post(
+          "/markers/request",
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
+
         if (response.data.error) {
           alert(response.data.error);
         } else {
@@ -235,9 +231,7 @@ export default {
         }
       } catch (error) {
         console.error("🚨 마커 저장 요청 실패:", error);
-        alert(
-          "🚨 오류 발생: " + (error.response?.data?.message || "네트워크 오류")
-        );
+        alert("🚨 오류 발생: " + (error.response?.data?.message || "네트워크 오류"));
       } finally {
         loading.value = false;
       }
